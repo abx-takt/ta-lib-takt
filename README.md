@@ -40,12 +40,16 @@ calls and 40,824 calls through this Python wrapper were compared with zero diffe
 walks, constant, alternating and volatile series, NaN and infinity inserts, magnitudes from 1e-300
 to 1e300, lengths from 1 to one million and 20 periods. To check on your own data, compute the same
 indicators in two virtual environments (one with `TA-Lib`, one with `ta-lib-takt`) and compare the
-arrays with `numpy.array_equal` (NaN in the same places counts as equal: use `equal_nan=True`).
+array shapes, dtypes and bytes (`array.tobytes()`), as well as the output indices.
+`numpy.array_equal(..., equal_nan=True)` checks values, but cannot establish bitwise equality
+of signed zeros or NaN encodings.
 
 ## Your own code, this fast?
 
-TAKT speeds up the hot code of backtests, parameter sweeps and model training, with output identical
-to the original, and measures the speedup before you pay. Free speed check:
+TAKT offers a free initial assessment of one repeated CPU workload, starting from its description.
+For suitable Rust and C/C++ projects, Level 1 shows a measured speedup before payment. Python and
+custom-library engineering use a separately scoped and priced Level 2 order, with agreed output
+requirements, payment and acceptance conditions. Describe one slow run:
 https://taktcycles.com/?src=github#start · Measurements and updates: https://t.me/taktcycles
 
 ## Licence

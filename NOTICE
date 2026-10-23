@@ -1,7 +1,8 @@
 ta-lib-takt bundles:
-- the TA-Lib Python wrapper 0.8.1 (https://github.com/ta-lib/ta-lib-python), unchanged, BSD 2-clause
+- the TA-Lib Python wrapper 0.8.2 (https://github.com/ta-lib/ta-lib-python), unchanged, BSD 2-clause
   (LICENSE);
 - a modified build of the TA-Lib C library 0.8.1 (https://github.com/ta-lib/ta-lib), BSD 3-clause
   (LICENSE-TA-LIB), built and modified by TAKT (ABX DEVELOPMENT LLP, https://taktcycles.com). The
-  source of the modified functions is not published.
+  official TA-Lib 0.8.2 Python package bundles the same C library version. The source of the
+  modified functions is not published.
 Not affiliated with or endorsed by the TA-Lib project or its contributors.

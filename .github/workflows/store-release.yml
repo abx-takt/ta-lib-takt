@@ -144,11 +144,13 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y clamav
-          mkdir -p "$RUNNER_TEMP/store-clamav-db"
-          printf 'DatabaseMirror database.clamav.net\nDatabaseDirectory %s\nDatabaseOwner %s\n' "$RUNNER_TEMP/store-clamav-db" "$(id -un)" > "$RUNNER_TEMP/store-freshclam.conf"
-          freshclam --stdout --config-file="$RUNNER_TEMP/store-freshclam.conf" | tee FRESHCLAM.txt
+          python tools/trust/prepare_clamav.py --root "$GITHUB_WORKSPACE/clamav-runtime" --metadata CLAMAV_CONFIG.json
+          test -s "$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf"
+          test -d "$GITHUB_WORKSPACE/clamav-runtime/db"
+          freshclam --config-file="$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf" --version > FRESHCLAM_CONFIG_CHECK.txt 2>&1
+          freshclam --stdout --config-file="$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf" 2>&1 | tee FRESHCLAM.txt
           clamscan --version > CLAMAV_DEFINITIONS.txt
-          clamscan --database="$RUNNER_TEMP/store-clamav-db" --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
+          clamscan --database="$GITHUB_WORKSPACE/clamav-runtime/db" --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
       - name: Dated VirusTotal observations - licensed GET API or owner-supplied hash links
         if: always()
         env:
@@ -175,6 +177,8 @@ jobs:
           path: |
             CLAMAV.txt
             FRESHCLAM.txt
+            CLAMAV_CONFIG.json
+            FRESHCLAM_CONFIG_CHECK.txt
             CLAMAV_DEFINITIONS.txt
             VIRUSTOTAL.json
             VIRUSTOTAL_LINKS.md

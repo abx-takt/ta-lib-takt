@@ -129,3 +129,15 @@ fetch_private_inputs.py and verified by an offline test. No ssh-keyscan, TOFU or
 StrictHostKeyChecking=no. Source:
 https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
 A host-key rotation requires a reviewed source update, not automatic trust.
+
+## Scanner configuration preflight
+
+The scanner uses a new workspace-local `clamav-runtime` directory, independent
+of RUNNER_TEMP. prepare_clamav.py creates exact LF-separated DatabaseMirror,
+DatabaseDirectory and DatabaseOwner directives, mode0600, and a new0700 DB directory;
+checks their actual bytes/accessibility; and emits CLAMAV_CONFIG.json. A pre-existing
+workspace is refused. The installed freshclam first parses that exact file via
+`--config-file=... --version` (no update/download), then performs the mandatory
+fresh update; either failure fails the scan gate. Config/version preflight and
+update stdout+stderr are retained in scanner-summary. No stale-definition or
+scanner-error bypass is introduced. Signing/publishing still default to false.

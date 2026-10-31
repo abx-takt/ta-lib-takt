@@ -94,3 +94,7 @@ wheel is automatically added to the current Linux-only publisher by this patch.
 The tiny signing fixture, mock unit certificates and synthetic binary structures
 are protocol controls, not a product PASS. Real native runs, protected signing,
 notary receipts and native purity remain MISSING until separately executed.
+
+## Native tracing diagnostic controls
+
+The separate `desktop-purity-controls.yml` manual workflow builds only public C controls and real DTrace/ETW observers. See [coverage and limits](../tools/trust/native_purity/README.md). It cannot certify a SKU, sign or publish. A green control workflow still leaves native import/call purity INCOMPLETE. No packaged verifier PASS is enabled by this source addition.

@@ -7,3 +7,7 @@ tools/trust/desktop_signing.py text eol=lf
 tools/trust/desktop_wheel.py text eol=lf
 tools/trust/test_desktop_signing.py text eol=lf
 tools/trust/test_desktop_wheel.py text eol=lf
+
+# Native purity diagnostics: stable source bytes on Windows runners.
+tools/trust/native_purity/** text eol=lf
+.github/workflows/desktop-purity-controls.yml text eol=lf

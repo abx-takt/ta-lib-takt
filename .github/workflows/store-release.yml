@@ -155,8 +155,9 @@ jobs:
           sudo stat -c '%n mode=%a owner=%U group=%G' /etc/clamav/freshclam.conf /var/lib/clamav/store-release/db > CLAMAV_INSTALLED_PATHS.txt
           sudo freshclam --config-file=/etc/clamav/freshclam.conf --version > FRESHCLAM_CONFIG_CHECK.txt 2>&1
           sudo freshclam --stdout --config-file=/etc/clamav/freshclam.conf 2>&1 | tee FRESHCLAM.txt
-          clamscan --version > CLAMAV_DEFINITIONS.txt
-          sudo clamscan --database=/var/lib/clamav/store-release/db --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
+          sudo freshclam --config-file=/etc/clamav/freshclam.conf --version > CLAMAV_DEFINITIONS.txt
+          sudo clamscan --database=/var/lib/clamav/store-release/db --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M store-release/dist store-release/native 2>&1 | tee CLAMAV.txt
+          python tools/trust/summarize_clamav.py --scan CLAMAV.txt --definitions CLAMAV_DEFINITIONS.txt --update FRESHCLAM.txt --output CLAMAV_SUMMARY.json
       - name: Dated VirusTotal observations - licensed GET API or owner-supplied hash links
         if: always()
         env:
@@ -182,6 +183,7 @@ jobs:
           name: store-scanner-summary-ta-lib-takt
           path: |
             CLAMAV.txt
+            CLAMAV_SUMMARY.json
             FRESHCLAM.txt
             CLAMAV_CONFIG.json
             CLAMAV_INSTALLED_PATHS.txt

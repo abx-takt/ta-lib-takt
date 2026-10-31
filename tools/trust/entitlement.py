@@ -7,6 +7,7 @@ No buyer names, contact fields, device binding, telemetry, expiry or remote swit
 """
 
 import argparse
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -18,6 +19,25 @@ import uuid
 
 SCHEMA = "urn:takt:entitlement:v1"
 SHARED_SCHEMA = "urn:takt:shared-store-artifact:v1"
+VENDOR_KEY_ID = "sha256:d2c5c31e6f032b82d744a19d1f7ddb54b407b9883dbccdc4521c7011f0b682fc"
+VENDOR_PEM_SHA256 = "3bd6f39b7650597a654eb78cadcd4c4f214cf7e2af1c4d05e384b0ef6ba53c3d"
+
+
+def vendor_anchor(public_key):
+    data = public_key.read_bytes()
+    if hashlib.sha256(data).hexdigest() != VENDOR_PEM_SHA256:
+        raise ValueError("Public key differs from the independently pinned vendor entitlement anchor")
+    lines = data.decode("ascii").splitlines()
+    if lines[0] != "-----BEGIN PUBLIC KEY-----" or lines[-1] != "-----END PUBLIC KEY-----":
+        raise ValueError("Expected public SPKI PEM")
+    der = base64.b64decode("".join(lines[1:-1]), validate=True)
+    if len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100")):
+        raise ValueError("Expected Ed25519 SPKI")
+    if "sha256:" + hashlib.sha256(der).hexdigest() != VENDOR_KEY_ID:
+        raise ValueError("Vendor SPKI fingerprint mismatch")
+    return {"key_id": VENDOR_KEY_ID, "public_key_sha256": VENDOR_PEM_SHA256,
+            "purpose": "offline entitlement certificates; not keyless artifact signing",
+            "network_requests": 0}
 
 
 def digest(path):
@@ -124,6 +144,8 @@ def private_directory(path):
 
 
 def prepare_shared(args):
+    if not args.test_only:
+        vendor_anchor(args.public_key)
     sku_version(args.sku, args.version)
     if not re.fullmatch(r"[A-Za-z0-9_.+-]+\.(?:so(?:\.[0-9]+)*|whl)", args.artifact.name):
         raise ValueError("A generic library/wheel filename is required")
@@ -154,6 +176,8 @@ def prepare_shared(args):
 
 def issue(args):
     shared = read_json(args.shared_manifest)
+    if shared.get("issuer_profile") == "SELF_MANAGED_VENDOR_KEY":
+        vendor_anchor(args.public_key)
     verify_signature(args.cosign, args.shared_manifest, args.shared_manifest.with_name(args.shared_manifest.name + ".sigstore.json"), args.public_key, args.trusted_root)
     if shared.get("schema") != SHARED_SCHEMA:
         raise ValueError("Expected authenticated shared-artifact manifest")
@@ -187,6 +211,8 @@ def issue(args):
 
 def verify(args):
     document = validate(read_json(args.certificate))
+    if document["issuer_profile"] == "SELF_MANAGED_VENDOR_KEY":
+        vendor_anchor(args.trusted_public_key)
     verify_signature(args.cosign, args.certificate, args.bundle, args.trusted_public_key, args.trusted_root)
     if document["artifact_sha256"] != digest(args.artifact):
         raise ValueError("Certificate is for different artifact bytes")
@@ -198,12 +224,15 @@ def verify(args):
             "order_ref": document["order_ref"], "sku": document["sku"], "version": document["version"],
             "artifact_sha256": document["artifact_sha256"], "seats_contractual": document["seats"],
             "term_contractual": document["term"], "runtime_authorization_or_expiry": False,
-            "trust_source": "explicit caller-provided public key; not the certificate"}
+            "trust_source": "pinned vendor anchor for production; explicit test key otherwise; never certificate-embedded",
+            "vendor_key_id": VENDOR_KEY_ID if document["issuer_profile"] == "SELF_MANAGED_VENDOR_KEY" else None}
 
 
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="action", required=True)
+    anchor = sub.add_parser("verify-anchor", help="Verify the independent public vendor key pin; no signing/network")
+    anchor.add_argument("--public-key", type=Path, required=True)
     for action in ("prepare-shared", "issue"):
         a = sub.add_parser(action)
         a.add_argument("--private-root", type=Path, required=True)
@@ -243,5 +272,6 @@ def parser():
 
 if __name__ == "__main__":
     args = parser().parse_args()
-    functions = {"prepare-shared": prepare_shared, "issue": issue, "verify": verify}
+    functions = {"prepare-shared": prepare_shared, "issue": issue, "verify": verify,
+                 "verify-anchor": lambda a: vendor_anchor(a.public_key)}
     print(json.dumps(functions[args.action](args)))

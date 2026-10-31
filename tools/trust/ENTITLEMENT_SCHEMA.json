@@ -121,5 +121,13 @@
         }
       ]
     }
+  },
+  "x-vendor-trust-anchor": {
+    "key_id": "sha256:d2c5c31e6f032b82d744a19d1f7ddb54b407b9883dbccdc4521c7011f0b682fc",
+    "public_key_sha256": "3bd6f39b7650597a654eb78cadcd4c4f214cf7e2af1c4d05e384b0ef6ba53c3d",
+    "public_key": "trust/vendor-entitlement-v1.pub.pem",
+    "metadata": "trust/vendor-entitlement-v1.json",
+    "distribution_url": "https://taktcycles.com/trust/vendor-entitlement-v1.pub.pem",
+    "scope": "SELF_MANAGED_VENDOR_KEY profile only; independent pin, never a key from certificate; artifact OIDC signatures separate"
   }
 }

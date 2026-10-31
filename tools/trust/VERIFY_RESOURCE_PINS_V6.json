@@ -1,0 +1,11 @@
+{
+  "profile": "resources-v6",
+  "files": {
+    "LICENSE-MIT": "75dab11c491440e261dd46d286c3f042cdfeb2980b3f05dd7e42c843f32cfed5",
+    "README.md": "422386260094a007bdb9225da402ca95a80261562e90f9aa73ac021a345748a9",
+    "pure.sh": "d25f882510d528fa250d28d956f6a28af10b276add75565755c489e9f7c0ffc3",
+    "pure_runner.py": "306440fdb4d9dd4ce103c281b744c407fbda582a521430ae90876df61e9dd3ac",
+    "signature.sh": "ff3096ad854dc65aa56bd9fc298f2f2c254088b48e21371963e29b69118b266f",
+    "trace_check.py": "9fd5a56c216993f49809642aabc145b11acf35f2da2ef59ff67c3e90d3ef3236"
+  }
+}

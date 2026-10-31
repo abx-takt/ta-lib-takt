@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:takt:entitlement:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "issuer",
+    "issuer_profile",
+    "order_ref",
+    "sku",
+    "version",
+    "artifact_sha256",
+    "seats",
+    "term",
+    "terms_revision"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:takt:entitlement:v1"
+    },
+    "issuer": {
+      "const": "TAKT"
+    },
+    "issuer_profile": {
+      "enum": [
+        "TEST_ONLY_LOCAL_KEY",
+        "SELF_MANAGED_VENDOR_KEY"
+      ]
+    },
+    "order_ref": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "not": {
+        "const": "00000000-0000-0000-0000-000000000000"
+      }
+    },
+    "sku": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9][A-Za-z0-9.]{0,79}$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "seats": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "terms_revision": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"
+    },
+    "term": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_use",
+        "support_updates_through"
+      ],
+      "properties": {
+        "binary_use": {
+          "enum": [
+            "perpetual",
+            "fixed_interval"
+          ]
+        },
+        "support_updates_through": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "starts_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "ends_on": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "binary_use": {
+                "const": "fixed_interval"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "starts_on",
+              "ends_on"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "starts_on"
+                  ]
+                },
+                {
+                  "required": [
+                    "ends_on"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

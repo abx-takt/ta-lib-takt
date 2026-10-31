@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 import hashlib
 import json
+import re
 from pathlib import Path
 import struct
 import subprocess
@@ -61,12 +62,29 @@ class InventoryControls(unittest.TestCase):
         workflow = (folder.parents[1] / ".github/workflows/store-release.yml").read_text()
         entry = workflow.split("      desktop_bootstrap:\n", 1)[1].split("permissions:\n", 1)[0]
         self.assertIn("default: false", entry)
-        job = workflow.split("  desktop-bootstrap:\n", 1)[1].split("  assemble:\n", 1)[0]
+        job = re.split(r"(?m)^  [A-Za-z0-9_-]+:\s*$", workflow.split("  desktop-bootstrap:\n", 1)[1], maxsplit=1)[0]
         self.assertIn("if: inputs.desktop_bootstrap && github.ref == 'refs/heads/main'", job)
         self.assertNotIn("secrets.", job)
         self.assertNotIn("environment:", job)
         for name in ["windows_x86_64", "macos_x86_64", "macos_arm64"]:
             self.assertIn("target: " + name, job)
+
+    def test_repository_signing_control_cannot_publish_or_run_implicitly(self):
+        folder = self.repository_root()
+        workflow = (folder.parents[1] / ".github/workflows/store-release.yml").read_text()
+        entry = workflow.split("      desktop_signing_smoke:\n", 1)[1].split("permissions:\n", 1)[0]
+        self.assertIn("default: false", entry)
+        for name in ["desktop-signing-macos", "desktop-signing-windows"]:
+            job = re.split(r"(?m)^  [A-Za-z0-9_-]+:\s*$", workflow.split("  " + name + ":\n", 1)[1], maxsplit=1)[0]
+            self.assertIn("needs: desktop-signing-config", job)
+            self.assertIn("inputs.sign_and_attest && !inputs.publish", job)
+            self.assertIn("github.ref == 'refs/heads/main'", job)
+            self.assertIn("environment: store-signing", job)
+            self.assertNotIn("gh-action-pypi-publish", job)
+        self.assertIn("if: github.ref == 'refs/heads/main' && !inputs.desktop_signing_smoke", workflow)
+        pins = json.loads((folder / "ACTION_PINS_DESKTOP_SIGNING.json").read_text())["actions"]
+        for repo, values in pins.items():
+            self.assertIn(repo.lower() + "@" + values["commit"], workflow.lower())
 
     def test_pe_has_no_signature_claim(self):
         d = subject.inspect_native(pe(), "windows_x86_64")
@@ -117,6 +135,19 @@ class InventoryControls(unittest.TestCase):
     def test_macho_architectures(self):
         self.assertEqual(subject.inspect_native(macho(), "macos_x86_64")["architecture"], "x86_64")
         self.assertEqual(subject.inspect_native(macho(0x0100000C, 0), "macos_arm64")["architecture"], "arm64")
+
+    def test_macho_macos_minimum_and_non_macos_platform(self):
+        command = struct.pack("<IIIIII", 0x32, 24, 1, 13 << 16, 15 << 16, 0)
+        self.assertEqual(subject.inspect_native(macho(extra=command), "macos_x86_64")["minimum_macos"], [13, 0, 0])
+        ios = struct.pack("<IIIIII", 0x32, 24, 2, 13 << 16, 15 << 16, 0)
+        with self.assertRaisesRegex(ValueError, "non-macOS"):
+            subject.inspect_native(macho(extra=ios), "macos_x86_64")
+
+    def test_macho_duplicate_minimum_commands_refused(self):
+        command = struct.pack("<IIIIII", 0x32, 24, 1, 13 << 16, 15 << 16, 0)
+        data = macho(extra=command + command); struct.pack_into("<I", data, 16, 3)
+        with self.assertRaisesRegex(ValueError, "Multiple minimum"):
+            subject.inspect_native(data, "macos_x86_64")
 
     def test_macho_write_execute_rejected(self):
         with self.assertRaisesRegex(ValueError, "Writable executable"):

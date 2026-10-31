@@ -3,3 +3,7 @@ tools/trust/desktop_bootstrap.py text eol=lf
 tools/trust/test_desktop_bootstrap.py text eol=lf
 tools/trust/DESKTOP_RESOURCE_PINS_V1.json text eol=lf
 tools/trust/resources-desktop-v1/** text eol=lf
+tools/trust/desktop_signing.py text eol=lf
+tools/trust/desktop_wheel.py text eol=lf
+tools/trust/test_desktop_signing.py text eol=lf
+tools/trust/test_desktop_wheel.py text eol=lf

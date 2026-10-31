@@ -35,6 +35,10 @@ on:
         description: Collect unsigned Windows/macOS runner inventory only; no desktop SKU release, credentials or payload execution
         type: boolean
         default: false
+      desktop_signing_smoke:
+        description: Protected tiny public fixture signing protocol only - requires sign_and_attest=true and publish=false; never a SKU release
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -57,7 +61,7 @@ jobs:
       matrix:
         include:
           - target: windows_x86_64
-            runner: windows-2022
+            runner: windows-latest
             python_arch: x64
           - target: macos_x86_64
             runner: macos-15-intel
@@ -74,7 +78,7 @@ jobs:
           python-version: '3.12'
           architecture: ${{ matrix.python_arch }}
       - name: Offline parser and fail-closed controls only
-        run: python -m unittest discover -s tools/trust -p "test_desktop_bootstrap.py" -v
+        run: python -m unittest discover -s tools/trust -p "test_desktop_*.py" -v
       - name: Capture native runner availability without reading signing credentials
         run: python tools/trust/desktop_bootstrap.py --target "${{ matrix.target }}" --output desktop-bootstrap/RESULT.json
       - name: Upload safe bootstrap receipt, not a release PASS or raw trace
@@ -84,8 +88,169 @@ jobs:
           name: store-desktop-bootstrap-${{ env.STORE_PACKAGE }}-${{ matrix.target }}
           path: desktop-bootstrap/RESULT.json
           if-no-files-found: warn
+  desktop-signing-config:
+    if: inputs.desktop_signing_smoke && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Refuse implicit signing or any bootstrap publication
+        env:
+          ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+          ENABLE_PUBLISHING: ${{ inputs.publish }}
+        run: python tools/trust/desktop_signing.py protocol-check --target windows_x86_64 --output desktop-protocol
+  desktop-signing-macos:
+    needs: desktop-signing-config
+    if: inputs.desktop_signing_smoke && inputs.sign_and_attest && !inputs.publish && github.ref == 'refs/heads/main'
+    environment: store-signing
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Supported signing hosts; this does not claim macOS13 runtime testing.
+          - target: macos_arm64
+            runner: ${{ vars.STORE_MACOS_ARM_RUNNER || 'macos-15' }}
+            python_arch: arm64
+          - target: macos_x86_64
+            runner: ${{ vars.STORE_MACOS_INTEL_RUNNER || 'macos-15-intel' }}
+            python_arch: x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Offline controls before protected environment operations
+        run: python -m unittest discover -s tools/trust -p "test_desktop_*.py" -v
+      - name: Tiny public signing protocol control - no SKU execution
+        env:
+          ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+          ENABLE_PUBLISHING: ${{ inputs.publish }}
+          APPLE_SIGNING_P12_B64: ${{ secrets.APPLE_SIGNING_P12_B64 }}
+          APPLE_SIGNING_P12_PASSWORD: ${{ secrets.APPLE_SIGNING_P12_PASSWORD }}
+          APPLE_ASC_KEY_P8_B64: ${{ secrets.APPLE_ASC_KEY_P8_B64 }}
+          APPLE_ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
+          APPLE_ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_SIGNING_CERT_SHA1: ${{ vars.APPLE_SIGNING_CERT_SHA1 }}
+          APPLE_SIGNING_CERT_SHA256: ${{ vars.APPLE_SIGNING_CERT_SHA256 }}
+        run: python tools/trust/desktop_signing.py macos-smoke --target "${{ matrix.target }}" --output desktop-signing-smoke
+      - name: Attest only final public control bytes and safe receipt
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            desktop-signing-smoke/subjects/desktop-signing-smoke
+            desktop-signing-smoke/subjects/libdesktop-signing-smoke-lib.dylib
+            desktop-signing-smoke/RESULT.json
+      - name: Safe public control evidence only - no keychain or credentials
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-signing-smoke-${{ env.STORE_PACKAGE }}-${{ matrix.target }}
+          path: |
+            desktop-signing-smoke/RESULT.json
+            desktop-signing-smoke/SUBJECTS.json
+            desktop-signing-smoke/SIGNED_SUBJECTS.json
+            desktop-signing-smoke/NOTARY_RECEIPT.json
+            desktop-signing-smoke/notary-subjects.zip
+          if-no-files-found: warn
+  desktop-signing-windows:
+    needs: desktop-signing-config
+    if: inputs.desktop_signing_smoke && inputs.sign_and_attest && !inputs.publish && github.ref == 'refs/heads/main'
+    environment: store-signing
+    runs-on: ${{ vars.STORE_WINDOWS_RUNNER || 'windows-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+      ENABLE_PUBLISHING: ${{ inputs.publish }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+      AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+      AZURE_SIGNING_CERTIFICATE_PROFILE: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
+      WINDOWS_PUBLISHER_NAME: ${{ vars.WINDOWS_PUBLISHER_NAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Offline controls before OIDC or signing
+        run: python -m unittest discover -s tools/trust -p "test_desktop_*.py" -v
+      - name: Validate public coordinator configuration without credentials
+        run: python tools/trust/desktop_signing.py preflight-windows --target windows_x86_64 --output desktop-oidc-preflight
+      - name: Compile only the fixed tiny public fixture, pin exact subjects
+        run: python tools/trust/desktop_signing.py prepare-smoke --target windows_x86_64 --output desktop-signing-smoke
+      - name: OIDC login scoped to the protected store-signing environment
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Artifact Signing Public Trust on the two exact control files
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
+          files: |
+            ${{ github.workspace }}\desktop-signing-smoke\subjects\desktop-signing-smoke.exe
+            ${{ github.workspace }}\desktop-signing-smoke\subjects\desktop-signing-smoke-lib.dll
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          append-signature: false
+          cache-dependencies: false
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+      - name: Verify Authenticode chain, expected publisher, timestamp and code/data
+        run: python tools/trust/desktop_signing.py verify-windows-smoke --target windows_x86_64 --output desktop-signing-smoke
+      - name: Attest only final public control bytes and safe receipt
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            desktop-signing-smoke/subjects/desktop-signing-smoke.exe
+            desktop-signing-smoke/subjects/desktop-signing-smoke-lib.dll
+            desktop-signing-smoke/RESULT.json
+      - name: Safe public control evidence only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-signing-smoke-${{ env.STORE_PACKAGE }}-windows_x86_64
+          path: |
+            desktop-oidc-preflight/RESULT.json
+            desktop-signing-smoke/RESULT.json
+            desktop-signing-smoke/SUBJECTS.json
+          if-no-files-found: warn
   assemble:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !inputs.desktop_signing_smoke
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

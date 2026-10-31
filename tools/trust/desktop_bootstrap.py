@@ -109,7 +109,7 @@ def macho64(data):
     if (architecture == "x86_64" and subtype & 0xFFFFFF != 3) or (architecture == "arm64" and subtype & 0xFFFFFF != 0):
         raise ValueError("Specialized Mach-O subtype requires a separate profile")
     position = 32
-    dependencies, rpaths, signed = [], [], False
+    dependencies, rpaths, signed, minimum = [], [], False, None
     for _ in range(count):
         cmd, size = unpack(endian + "II", data, position)
         if size < 8 or size % 8 or position + size > 32 + total:
@@ -147,11 +147,30 @@ def macho64(data):
             if length < 8 or offset < 32 + total or offset + length > len(data):
                 raise ValueError("Invalid signature blob bounds")
             signed = True
+        elif base == 0x32:
+            if size < 24:
+                raise ValueError("Truncated build-version command")
+            build_platform, version = unpack(endian + "II", data, position + 8)
+            if build_platform != 1:
+                raise ValueError("Mach-O is for a non-macOS Apple platform")
+            if minimum is not None:
+                raise ValueError("Multiple minimum-OS commands require separate admission")
+            minimum = [version >> 16, (version >> 8) & 255, version & 255]
+        elif base == 0x24:
+            if size != 16:
+                raise ValueError("Invalid minimum-macOS command")
+            version = unpack(endian + "I", data, position + 8)[0]
+            if minimum is not None:
+                raise ValueError("Multiple minimum-OS commands require separate admission")
+            minimum = [version >> 16, (version >> 8) & 255, version & 255]
+        elif base in {0x25, 0x2F, 0x30}:
+            raise ValueError("Mach-O is for a non-macOS Apple platform")
         position += size
     if position != 32 + total:
         raise ValueError("Mach-O command count/size mismatch")
     return {"format": "Mach-O64", "architecture": architecture, "dependencies": dependencies,
             "rpaths": rpaths, "signature_blob_present": signed,
+            "minimum_macos": minimum,
             "no_writable_executable_segment": True}
 
 

@@ -144,13 +144,19 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y clamav
-          python tools/trust/prepare_clamav.py --root "$GITHUB_WORKSPACE/clamav-runtime" --metadata CLAMAV_CONFIG.json
-          test -s "$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf"
-          test -d "$GITHUB_WORKSPACE/clamav-runtime/db"
-          freshclam --config-file="$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf" --version > FRESHCLAM_CONFIG_CHECK.txt 2>&1
-          freshclam --stdout --config-file="$GITHUB_WORKSPACE/clamav-runtime/freshclam.conf" 2>&1 | tee FRESHCLAM.txt
+          sudo systemctl stop clamav-freshclam.service
+          if [ -f /etc/apparmor.d/usr.bin.freshclam ]; then
+            cat /etc/apparmor.d/usr.bin.freshclam > CLAMAV_APPARMOR_PROFILE.txt
+          fi
+          sudo python3 tools/trust/prepare_clamav.py --root /var/lib/clamav/store-release --owner clamav --metadata CLAMAV_CONFIG.json
+          sudo chown clamav:clamav /var/lib/clamav/store-release /var/lib/clamav/store-release/db
+          sudo install -o root -g clamav -m 0640 /var/lib/clamav/store-release/freshclam.conf /etc/clamav/freshclam.conf
+          sudo cmp /var/lib/clamav/store-release/freshclam.conf /etc/clamav/freshclam.conf
+          sudo stat -c '%n mode=%a owner=%U group=%G' /etc/clamav/freshclam.conf /var/lib/clamav/store-release/db > CLAMAV_INSTALLED_PATHS.txt
+          sudo freshclam --config-file=/etc/clamav/freshclam.conf --version > FRESHCLAM_CONFIG_CHECK.txt 2>&1
+          sudo freshclam --stdout --config-file=/etc/clamav/freshclam.conf 2>&1 | tee FRESHCLAM.txt
           clamscan --version > CLAMAV_DEFINITIONS.txt
-          clamscan --database="$GITHUB_WORKSPACE/clamav-runtime/db" --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
+          sudo clamscan --database=/var/lib/clamav/store-release/db --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
       - name: Dated VirusTotal observations - licensed GET API or owner-supplied hash links
         if: always()
         env:
@@ -178,6 +184,8 @@ jobs:
             CLAMAV.txt
             FRESHCLAM.txt
             CLAMAV_CONFIG.json
+            CLAMAV_INSTALLED_PATHS.txt
+            CLAMAV_APPARMOR_PROFILE.txt
             FRESHCLAM_CONFIG_CHECK.txt
             CLAMAV_DEFINITIONS.txt
             VIRUSTOTAL.json

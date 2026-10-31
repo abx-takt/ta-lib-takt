@@ -130,14 +130,21 @@ StrictHostKeyChecking=no. Source:
 https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
 A host-key rotation requires a reviewed source update, not automatic trust.
 
-## Scanner configuration preflight
+## Scanner configuration preflight and Ubuntu confinement
 
-The scanner uses a new workspace-local `clamav-runtime` directory, independent
-of RUNNER_TEMP. prepare_clamav.py creates exact LF-separated DatabaseMirror,
-DatabaseDirectory and DatabaseOwner directives, mode0600, and a new0700 DB directory;
-checks their actual bytes/accessibility; and emits CLAMAV_CONFIG.json. A pre-existing
-workspace is refused. The installed freshclam first parses that exact file via
-`--config-file=... --version` (no update/download), then performs the mandatory
-fresh update; either failure fails the scan gate. Config/version preflight and
-update stdout+stderr are retained in scanner-summary. No stale-definition or
-scanner-error bypass is introduced. Signing/publishing still default to false.
+Ubuntu's packaged freshclam may have an enforcing AppArmor profile permitting
+configuration under /etc/clamav and databases under /var/lib/clamav. The scanner
+keeps that profile enabled. It stops the package's background updater to avoid
+concurrent database ownership, creates a new /var/lib/clamav/store-release/db
+(mode0700, owner clamav) and installs the validated minimal configuration at
+/etc/clamav/freshclam.conf (root:clamav, mode0640). The prepared source configuration
+and installed bytes must match. No stale database is reused.
+
+prepare_clamav.py creates exact LF-separated DatabaseMirror, DatabaseDirectory
+and DatabaseOwner directives and records their SHA. sudo freshclam parses the
+installed file with --version before the mandatory fresh update. sudo clamscan
+uses the same exact new database, retaining age/limit/error refusal behavior.
+The scanner never executes a package payload. Config preparation, actual installed
+path permissions, package AppArmor profile, parser and update stdout/stderr are
+retained in scanner-summary. No profile is removed or switched to complain mode.
+Signing/publishing remain false by default.

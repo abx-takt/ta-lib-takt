@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 import hashlib
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -8,6 +11,18 @@ from prepare_clamav import prepare
 
 
 class ClamAVConfigTests(unittest.TestCase):
+    def test_cli_uses_explicit_updater_owner_without_running_scanner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name("prepare_clamav.py")),
+                                     "--root", str(root / "db-root"), "--owner", "clamav",
+                                     "--metadata", str(root / "metadata.json")],
+                                    capture_output=True, text=True, check=True)
+            metadata = json.loads(result.stdout)
+            self.assertEqual(metadata["owner"], "clamav")
+            self.assertFalse(metadata["scanner_execution"])
+            self.assertIn(b"DatabaseOwner clamav\n", Path(metadata["config"]).read_bytes())
+
     def test_exact_configuration_exists_with_lf_directives_and_permissions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "clamav-runtime"

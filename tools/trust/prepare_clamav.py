@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Create and verify a fresh scanner workspace before invoking freshclam."""
+"""Create and verify a fresh scanner directory before invoking freshclam."""
 import argparse
 import hashlib
 import json
@@ -42,7 +42,8 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--metadata", type=Path, required=True)
+    p.add_argument("--owner", help="Explicit updater account when preparing standard paths with sudo")
     args = p.parse_args()
-    result = prepare(args.root, pwd.getpwuid(os.getuid()).pw_name)
+    result = prepare(args.root, args.owner or pwd.getpwuid(os.getuid()).pw_name)
     args.metadata.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, sort_keys=True))

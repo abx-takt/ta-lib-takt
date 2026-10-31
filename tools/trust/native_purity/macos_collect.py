@@ -41,6 +41,34 @@ def diagnostic_code(stderr):
     return "TRACER_NOT_READY"
 
 
+def begin_matches(data, target_pid):
+    # A pipe read may legally coalesce BEGIN with the first target records.
+    first_line, separator, _suffix = data.partition(b"\n")
+    return bool(separator) and first_line == f"B|{target_pid}".encode()
+
+
+def cleanup_tracer(tracer):
+    """Stop only the observer session/group created by this Popen, even under sudo."""
+    if tracer.poll() is not None:
+        return
+    for signum, signame in ((signal.SIGINT, "INT"), (signal.SIGKILL, "KILL")):
+        try:
+            os.killpg(tracer.pid, signum)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            # start_new_session=True guarantees this PGID is observer-only, not target/driver.
+            stopped = subprocess.run(["sudo", "-n", "/bin/kill", "-" + signame, "-" + str(tracer.pid)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
+            if stopped.returncode and tracer.poll() is None:
+                raise RuntimeError("OBSERVER_CLEANUP_PRIVILEGE_UNAVAILABLE")
+        try:
+            tracer.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+    raise RuntimeError("OBSERVER_CLEANUP_INCOMPLETE")
+
+
 def classify(provider, name, args):
     """Conservative positive detections; absence of a hit is not a proof."""
     if provider == "M":
@@ -125,16 +153,19 @@ def collect(launcher, command, script, timeout):
             stopped, status = os.waitpid(child.pid, os.WUNTRACED)
             if stopped != child.pid or not os.WIFSTOPPED(status): raise RuntimeError("PRE_EXEC_STOP_MISSING")
             # sudo is tracer-only. The target retains the caller's uid, SIP untouched.
-            tracer = subprocess.Popen(["sudo", "-n", "/usr/sbin/dtrace", "-q", "-s", str(script), "-p", str(child.pid)], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=trace_err, close_fds=True)
+            tracer = subprocess.Popen(["sudo", "-n", "/usr/sbin/dtrace", "-q", "-s", str(script), "-p", str(child.pid)], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=trace_err, close_fds=True, start_new_session=True)
             if tracer.stdout is None: raise RuntimeError("TRACER_PIPE_MISSING")
             selector = selectors.DefaultSelector(); selector.register(tracer.stdout, selectors.EVENT_READ)
             first = b""; deadline = time.monotonic() + timeout
             while b"\n" not in first and time.monotonic() < deadline:
-                if selector.select(0.1): first += os.read(tracer.stdout.fileno(), 65536)
+                if selector.select(0.1):
+                    chunk = os.read(tracer.stdout.fileno(), 65536)
+                    if not chunk: break
+                    first += chunk
                 elif tracer.poll() is not None: break
             selector.close()
             # No target code runs until the kernel tracer emits BEGIN for this PID.
-            if first != f"B|{child.pid}\n".encode():
+            if not begin_matches(first, child.pid):
                 trace_err.seek(0)
                 diagnostic = trace_err.read().decode("utf-8", errors="replace")
                 raise CollectorUnavailable(diagnostic_code(diagnostic), diagnostic)
@@ -153,11 +184,8 @@ def collect(launcher, command, script, timeout):
                 if fd >= 0: os.close(fd)
             if child is not None and child.poll() is None:
                 child.kill(); child.wait()
-            if tracer is not None and tracer.poll() is None:
-                # SIGINT is the normal DTrace shutdown path. No shared tracing session touched.
-                tracer.send_signal(signal.SIGINT)
-                try: tracer.wait(timeout=5)
-                except subprocess.TimeoutExpired: tracer.kill(); tracer.wait()
+            if tracer is not None:
+                cleanup_tracer(tracer)
 
 
 def main():

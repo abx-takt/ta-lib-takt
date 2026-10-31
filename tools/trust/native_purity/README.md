@@ -34,6 +34,9 @@ diagnostics (including drops), missing boundaries and nonzero return codes retai
 SIP is recorded and remains enabled. A missing provider or attach privilege is a
 specific NEED, not a reason to disable system protection. Apple documents protected
 process restrictions and distinguishes development inspection of one's own apps.
+The observer is started in its own process session/group. Cleanup signals only that
+group, using `sudo -n /bin/kill` if the unprivileged caller gets EPERM; no global
+process-name kill is used. Cleanup failure is itself INCOMPLETE.
 [Apple runtime protections](https://developer.apple.com/library/archive/documentation/Security/Conceptual/System_Integrity_Protection_Guide/RuntimeProtections/RuntimeProtections.html),
 [Apple provider source](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/dev/dtrace/systrace.c).
 

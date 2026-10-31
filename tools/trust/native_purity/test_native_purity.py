@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest import mock
+import signal
 
 spec = importlib.util.spec_from_file_location("macos_collect", Path(__file__).with_name("macos_collect.py"))
 mac = importlib.util.module_from_spec(spec)
@@ -75,6 +77,29 @@ class NativeTraceTests(unittest.TestCase):
     def test_second_exec_is_not_hidden_by_start_boundary(self):
         result = self.parse(self.event("execve"), self.event("execve"))
         self.assertIn("PROCESS_REPLACEMENT_AFTER_INITIAL_EXEC", result["violations"])
+
+    def test_coalesced_begin_keeps_suffix(self):
+        raw = ("B|123\n" + self.event("write", [5, 0, 1, 0, 0, 0]) + "\nT|0\nE\n").encode()
+        self.assertTrue(mac.begin_matches(raw, 123))
+        self.assertIn("FILE_WRITE_ATTEMPT", mac.parse_trace(raw.decode(), "", 123, 0)["violations"])
+        self.assertFalse(mac.begin_matches(raw, 999))
+        self.assertFalse(mac.begin_matches(b"B|123", 123))
+
+    def test_cleanup_eperm_uses_only_own_observer_group(self):
+        tracer = mock.Mock(pid=12345)
+        tracer.poll.return_value = None
+        tracer.wait.return_value = 0
+        with mock.patch.object(mac.os, "killpg", side_effect=PermissionError()), mock.patch.object(mac.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            mac.cleanup_tracer(tracer)
+        self.assertEqual(run.call_args.args[0], ["sudo", "-n", "/bin/kill", "-INT", "-12345"])
+        tracer.wait.assert_called_once_with(timeout=5)
+
+    def test_cleanup_missing_privilege_is_not_silently_successful(self):
+        tracer = mock.Mock(pid=12345)
+        tracer.poll.return_value = None
+        with mock.patch.object(mac.os, "killpg", side_effect=PermissionError()), mock.patch.object(mac.subprocess, "run", return_value=mock.Mock(returncode=1)):
+            with self.assertRaisesRegex(RuntimeError, "OBSERVER_CLEANUP_PRIVILEGE_UNAVAILABLE"):
+                mac.cleanup_tracer(tracer)
 
 
 if __name__ == "__main__": unittest.main()

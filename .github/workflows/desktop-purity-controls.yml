@@ -1,0 +1,94 @@
+name: Desktop native purity diagnostics (public controls only)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_public_controls_only:
+        description: 'Trace only the public C controls; this cannot certify or publish a SKU'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: desktop-purity-controls-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-controls:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos_arm64
+            runner: macos-15
+            arch: arm64
+            minimum: '14.0'
+          - target: macos_x86_64
+            runner: macos-15-intel
+            arch: x64
+            minimum: '13.0'
+          - target: windows_x86_64
+            runner: windows-latest
+            arch: x64
+            minimum: ''
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.arch }}
+      - name: Require explicit control-only confirmation
+        env:
+          CONFIRM_CONTROLS_ONLY: ${{ inputs.confirm_public_controls_only }}
+        run: python -c "import os; raise SystemExit(0 if os.environ['CONFIRM_CONTROLS_ONLY'] == 'true' else 3)"
+      - name: Offline classifier negative controls
+        run: python -m unittest discover -s tools/trust/native_purity -p test_native_purity.py -v
+      - name: Record actual native host (no credentials)
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: python tools/trust/desktop_bootstrap.py --target "$EXPECTED_TARGET" --output desktop-purity-host/RESULT.json
+        shell: bash
+      - name: Require the declared native architecture
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: python -c "import os,platform; arch=platform.machine().lower(); want=os.environ['EXPECTED_TARGET']; good=(arch in {'arm64','aarch64'} if want == 'macos_arm64' else arch in {'x86_64','amd64'}); raise SystemExit(0 if good else 3)"
+      - name: Compile only public controls on macOS
+        if: runner.os == 'macOS'
+        env:
+          CONTROL_MINIMUM_OS: ${{ matrix.minimum }}
+        run: |
+          cmake -S tools/trust/native_purity -B desktop-purity-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET="$CONTROL_MINIMUM_OS"
+          cmake --build desktop-purity-build --parallel 2
+          csrutil status
+      - name: Compile only public controls on Windows
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S tools/trust/native_purity -B desktop-purity-build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build desktop-purity-build --config Release --parallel 2
+      - name: Install pinned .NET SDK for the Windows ETW consumer
+        if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '8.0.427'
+      - name: Build hash-locked ETW consumer
+        if: runner.os == 'Windows'
+        run: dotnet build tools/trust/native_purity/windows/Collector.csproj --configuration Release -p:RestoreLockedMode=true --output desktop-purity-build/etw --nologo
+      - name: Collect native traces (known violations must be visible)
+        run: python tools/trust/native_purity/run_controls.py --build desktop-purity-build --out desktop-purity-results
+      - name: Upload safe diagnostic summaries only (never raw kernel trace)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: native-purity-diagnostic-${{ matrix.target }}
+          path: |
+            desktop-purity-results/*.json
+            desktop-purity-host/RESULT.json
+          if-no-files-found: warn

@@ -50,6 +50,7 @@ env:
   STORE_VERSION: ${{ inputs.version }}
 jobs:
   desktop-bootstrap:
+    needs: desktop-signing-config
     # Inventory only. This opt-in job cannot sign, publish or certify a SKU.
     if: inputs.desktop_bootstrap && github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
@@ -89,7 +90,7 @@ jobs:
           path: desktop-bootstrap/RESULT.json
           if-no-files-found: warn
   desktop-signing-config:
-    if: inputs.desktop_signing_smoke && github.ref == 'refs/heads/main'
+    if: (inputs.desktop_bootstrap || inputs.desktop_signing_smoke) && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -102,7 +103,7 @@ jobs:
         env:
           ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
           ENABLE_PUBLISHING: ${{ inputs.publish }}
-        run: python tools/trust/desktop_signing.py protocol-check --target windows_x86_64 --output desktop-protocol
+        run: python tools/trust/desktop_signing.py ${{ inputs.desktop_signing_smoke && 'protocol-check' || 'inventory-check' }} --target windows_x86_64 --output desktop-protocol
   desktop-signing-macos:
     needs: desktop-signing-config
     if: inputs.desktop_signing_smoke && inputs.sign_and_attest && !inputs.publish && github.ref == 'refs/heads/main'
@@ -250,7 +251,7 @@ jobs:
             desktop-signing-smoke/SUBJECTS.json
           if-no-files-found: warn
   assemble:
-    if: github.ref == 'refs/heads/main' && !inputs.desktop_signing_smoke
+    if: github.ref == 'refs/heads/main' && !inputs.desktop_bootstrap && !inputs.desktop_signing_smoke
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

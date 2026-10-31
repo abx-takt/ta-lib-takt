@@ -81,7 +81,7 @@ class InventoryControls(unittest.TestCase):
             self.assertIn("github.ref == 'refs/heads/main'", job)
             self.assertIn("environment: store-signing", job)
             self.assertNotIn("gh-action-pypi-publish", job)
-        self.assertIn("if: github.ref == 'refs/heads/main' && !inputs.desktop_signing_smoke", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main' && !inputs.desktop_bootstrap && !inputs.desktop_signing_smoke", workflow)
         pins = json.loads((folder / "ACTION_PINS_DESKTOP_SIGNING.json").read_text())["actions"]
         for repo, values in pins.items():
             self.assertIn(repo.lower() + "@" + values["commit"], workflow.lower())

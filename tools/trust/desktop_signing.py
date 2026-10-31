@@ -332,7 +332,7 @@ def macos_smoke(target, output, env):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["protocol-check", "preflight-windows", "prepare-smoke", "macos-smoke", "verify-windows-smoke"])
+    parser.add_argument("mode", choices=["inventory-check", "protocol-check", "preflight-windows", "prepare-smoke", "macos-smoke", "verify-windows-smoke"])
     parser.add_argument("--target", choices=sorted(TARGETS), required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -341,7 +341,11 @@ def main():
               "runner": {"system": platform.system(), "machine": platform.machine(), "version": platform.version(),
                          "ImageOS": os.environ.get("ImageOS"), "ImageVersion": os.environ.get("ImageVersion")}}
     try:
-        if args.mode == "protocol-check":
+        if args.mode == "inventory-check":
+            if os.environ.get("ENABLE_SIGNING") != "false" or os.environ.get("ENABLE_PUBLISHING") != "false":
+                raise ValueError("INVENTORY_CONTROL_REQUIRES_SIGN_FALSE_PUBLISH_FALSE")
+            result.update(status="INVENTORY_CONTROL_CONFIGURATION_VALID")
+        elif args.mode == "protocol-check":
             require_protocol(os.environ)
             result.update(status="SIGNING_CONTROL_CONFIGURATION_VALID")
         elif args.mode == "preflight-windows":

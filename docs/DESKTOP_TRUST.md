@@ -36,7 +36,7 @@ before final wheel RECORD/hashes/external attestations, with no later mutation.
 
 `desktop_signing_smoke=true` is a separate opt-in control. It requires
 `sign_and_attest=true`, `publish=false`, trusted main and the protected
-`store-signing` environment. It bypasses the existing Linux assemble/check/
+`store-signing` environment. Both desktop modes bypass the existing Linux assemble/check/
 scanner/release path, so it is not another Linux ClamAV trial. Normal release
 behaviour retains the existing default when this option is false.
 

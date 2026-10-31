@@ -1,0 +1,11 @@
+{
+  "profile": "desktop-bootstrap-v1",
+  "status": "INCOMPLETE_NATIVE_COLLECTOR_MISSING",
+  "sha256": {
+    "LICENSE-MIT": "75dab11c491440e261dd46d286c3f042cdfeb2980b3f05dd7e42c843f32cfed5",
+    "README.md": "764eb476864e8c133c5987502a91de92cfa2a2640dfb801a58dd54692ce7713a",
+    "desktop_bootstrap.py": "029975b0b5548af8be6caaebbab8906bc31c7a17527111537b22fd2424ff808b",
+    "pure.ps1": "f305a8a5ca1e95b40d20d701b060b75338a63e0193cc1e9761b78d3eb1134b97",
+    "pure.sh": "1937aebc7fcb241e45442755a7813049f7d21dfe66b5bdc52138f2bd7f5c654d"
+  }
+}

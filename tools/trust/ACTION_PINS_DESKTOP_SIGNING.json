@@ -1,0 +1,15 @@
+{
+  "utc": "2026-10-31T12:17:45.659599+00:00",
+  "actions": {
+    "Azure/artifact-signing-action": {
+      "tag": "v2",
+      "commit": "c7ab2a863ab5f9a846ddb8265964877ef296ee82",
+      "source": "https://api.github.com/repos/Azure/artifact-signing-action/commits/v2"
+    },
+    "Azure/login": {
+      "tag": "v3",
+      "commit": "a641126d1b8aa4d1fa005f4f92df94a3a4c4c906",
+      "source": "https://api.github.com/repos/Azure/login/commits/v3"
+    }
+  }
+}

@@ -6,6 +6,11 @@ on:
         description: Version with a reviewed checked-in .store/manifests entry
         type: string
         required: true
+      input_transport:
+        description: Private inputs transport - auto prefers the read-only SSH deploy key; PAT is an explicit alternative
+        type: choice
+        options: [auto, ssh, pat]
+        default: auto
       sign_and_attest:
         description: Publish keyless signatures and GitHub attestations
         type: boolean
@@ -61,10 +66,12 @@ jobs:
           PY
       - name: Test offline trust helpers
         run: python -m unittest discover -s tools/trust -p 'test_*.py' -v
-      - name: Fetch reviewed inputs from the private release asset
+      - name: Fetch reviewed inputs using the read-only deploy key or release PAT
         env:
           GH_TOKEN: ${{ secrets.STORE_INPUTS_READ_TOKEN }}
-        run: python tools/trust/fetch_private_inputs.py --descriptor ".store/inputs/$STORE_PACKAGE/$STORE_VERSION.json" --output store-inputs
+          STORE_INPUTS_DEPLOY_KEY: ${{ secrets.STORE_INPUTS_DEPLOY_KEY }}
+          INPUT_TRANSPORT: ${{ inputs.input_transport }}
+        run: python tools/trust/fetch_private_inputs.py --descriptor ".store/inputs/$STORE_PACKAGE/$STORE_VERSION.json" --output store-inputs --transport "$INPUT_TRANSPORT"
       - name: Assemble the approved store inputs without a protector
         run: python tools/trust/ci_support.py assemble --manifest ".store/manifests/$STORE_PACKAGE/$STORE_VERSION.json" --output store-release
       - name: Keep final artifacts separate from reference/check inputs

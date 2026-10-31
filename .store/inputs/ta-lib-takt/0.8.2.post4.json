@@ -1,7 +1,7 @@
 {
-  "schema": 1,
+  "schema": 2,
   "repository": "abx-takt/store-build-inputs",
-  "tag": "store-inputs-2026-10-31-v6",
+  "tag": "inputs-git-2026-10-31-v6",
   "asset": "ta-lib-takt-0.8.2.post4-inputs.zip",
   "sha256": "4d1416bd9b958c188f9fc57d78ffb881a9dc4f8db5cce3844df4c5a9201bb41f",
   "files": {
@@ -17,5 +17,8 @@
       "sha256": "734875684ca8a584cafe0e614b35640184f9631da1a38915df32347ae8b51eb8",
       "bytes": 4052533
     }
-  }
+  },
+  "release_tag": "store-inputs-2026-10-31-v6",
+  "commit": "7f34571aee38da77a376fb28c5fea086a0c0b59e",
+  "path": "inputs/ta-lib-takt-0.8.2.post4-inputs.zip"
 }

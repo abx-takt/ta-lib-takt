@@ -65,9 +65,10 @@ final review artifacts are separated from the sign/publish allowlists. Raw pure
 traces, model/input data, private source and certificates are never uploaded.
 No dispatch, signing, publishing or secret configuration is performed by this PR.
 
-## Owner-only entitlement key ceremony
+## Owner-controlled entitlement key and future rotation
 
-Run `tools/trust/generate_vendor_key_offline.py` yourself on an offline Linux
+The v1 public anchor is committed; the owner authorized its ceremony. For a future
+rotation, run `tools/trust/generate_vendor_key_offline.py` yourself on an offline Linux
 machine with OpenSSL, age and unshare installed. Supply a trusted **public**
 X25519 age recipient file; never provide an age identity/private key to an agent.
 For example (choose your real local paths, no production key is generated here):
@@ -91,8 +92,8 @@ shell xtrace, capture process memory, or upload the private directory.
 
 Commit/deploy **only** `vendor-entitlement-v1.pub.pem` and its JSON fingerprint
 from each public directory. Publish identical public bytes at
-https://taktcycles.com/trust/. Until the owner runs this ceremony and distributes
-the public fingerprint independently, production entitlement trust is pending.
+https://taktcycles.com/trust/. The committed v1 public fingerprint is listed below;
+site deployment and independent recipient verification remain separate steps.
 The script is not executed by CI or by the assistant. The PKCS8 key must be
 imported into the existing Cosign issuer by the owner offline when issuing;
 keep any decrypted/imported key and password solely in owner RAM/private storage.
@@ -155,3 +156,34 @@ requires exactly one Infected files:0 summary and a matching engine version plus
 the actual configured database version/build date (freshclam --version after
 update). Both full freshclam/clamscan stdout+stderr logs remain in the artifact.
 This is a dated observation, not a general safety certificate.
+
+## Vendor anchor and two distinct signature purposes
+
+Entitlement key ID (SHA256 of Ed25519 SPKI DER):
+`sha256:d2c5c31e6f032b82d744a19d1f7ddb54b407b9883dbccdc4521c7011f0b682fc`.
+PEM SHA256: `3bd6f39b7650597a654eb78cadcd4c4f214cf7e2af1c4d05e384b0ef6ba53c3d`.
+Public files: `trust/vendor-entitlement-v1.pub.pem` and `trust/vendor-entitlement-v1.json`;
+planned web copies: https://taktcycles.com/trust/vendor-entitlement-v1.pub.pem and
+https://taktcycles.com/trust/vendor-entitlement-v1.json . Check this fingerprint
+through an independently trusted channel before using a downloaded key.
+
+`ENTITLEMENT_SCHEMA.json` records this external anchor as schema metadata;
+certificates do not supply their own trust key. Production prepare-shared/issue/
+verify checks the pinned public key before invoking signature tools; test-only
+profiles remain explicitly separate. No certificate fields or binary bytes change.
+
+```sh
+python tools/trust/entitlement.py verify-anchor --public-key trust/vendor-entitlement-v1.pub.pem
+```
+
+For owner-offline prepare-shared/issue, pass this file as `--public-key`. For
+recipient verify use `--trusted-public-key trust/vendor-entitlement-v1.pub.pem`
+and `--require-production`, alongside the certificate, artifact and their other
+explicit arguments. Production private material remains only with the owner;
+no private key/age identity is needed in this repository or CI. Actual production
+certificate signing is not claimed by the public-key checks.
+
+Artifact `sign_release.py --mode keyless` and GitHub/PyPI attestations use their
+OIDC identity/provenance checks, not this entitlement key. The CI anchor check
+only verifies the public pin. Do not substitute the vendor PEM for a keyless
+certificate identity or put the owner's signing key into Actions.

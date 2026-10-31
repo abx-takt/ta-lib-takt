@@ -64,6 +64,8 @@ jobs:
           manifest=json.load(open('.store/manifests/'+os.environ['STORE_PACKAGE']+'/'+version+'.json'))
           if manifest['package']!=os.environ['STORE_PACKAGE'] or manifest['version']!=version: raise SystemExit('manifest identity mismatch')
           PY
+      - name: Verify independent public vendor entitlement anchor
+        run: python tools/trust/entitlement.py verify-anchor --public-key trust/vendor-entitlement-v1.pub.pem
       - name: Test offline trust helpers
         run: python -m unittest discover -s tools/trust -p 'test_*.py' -v
       - name: Fetch reviewed inputs using the read-only deploy key or release PAT
@@ -216,6 +218,7 @@ jobs:
           path: store-release
       - name: Install independently pinned signing tool
         run: python tools/trust/install_cosign.py --output signing-tools/cosign
+      # Keyless artifact signatures use GitHub OIDC; vendor key is for offline entitlements only.
       - name: Sign final wheel, exact native payloads and manifest; execute none
         env:
           EXPECTED_IDENTITY: https://github.com/${{ github.workflow_ref }}

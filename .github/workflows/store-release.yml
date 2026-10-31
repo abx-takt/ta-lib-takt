@@ -31,6 +31,10 @@ on:
         description: API mode only - owner confirms a licence permitting this commercial workflow (Public API forbidden)
         type: boolean
         default: false
+      desktop_bootstrap:
+        description: Collect unsigned Windows/macOS runner inventory only; no desktop SKU release, credentials or payload execution
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -41,6 +45,45 @@ env:
   STORE_PACKAGE: 'ta-lib-takt'
   STORE_VERSION: ${{ inputs.version }}
 jobs:
+  desktop-bootstrap:
+    # Inventory only. This opt-in job cannot sign, publish or certify a SKU.
+    if: inputs.desktop_bootstrap && github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows_x86_64
+            runner: windows-2022
+            python_arch: x64
+          - target: macos_x86_64
+            runner: macos-15-intel
+            python_arch: x64
+          - target: macos_arm64
+            runner: macos-15
+            python_arch: arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Offline parser and fail-closed controls only
+        run: python -m unittest discover -s tools/trust -p "test_desktop_bootstrap.py" -v
+      - name: Capture native runner availability without reading signing credentials
+        run: python tools/trust/desktop_bootstrap.py --target "${{ matrix.target }}" --output desktop-bootstrap/RESULT.json
+      - name: Upload safe bootstrap receipt, not a release PASS or raw trace
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-desktop-bootstrap-${{ env.STORE_PACKAGE }}-${{ matrix.target }}
+          path: desktop-bootstrap/RESULT.json
+          if-no-files-found: warn
   assemble:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04

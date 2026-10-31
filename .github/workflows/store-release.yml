@@ -14,6 +14,18 @@ on:
         description: Publish the already tested and signed wheel to PyPI
         type: boolean
         default: false
+      vt_report_urls:
+        description: Manual mode - whitespace-separated exact VirusTotal GUI SHA256 URLs for every final hash
+        type: string
+        default: ''
+      vt_observed_at:
+        description: Manual mode - owner observation timestamp with timezone (ISO8601)
+        type: string
+        default: ''
+      vt_commercial_api_authorized:
+        description: API mode only - owner confirms a licence permitting this commercial workflow (Public API forbidden)
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -47,6 +59,8 @@ jobs:
           manifest=json.load(open('.store/manifests/'+os.environ['STORE_PACKAGE']+'/'+version+'.json'))
           if manifest['package']!=os.environ['STORE_PACKAGE'] or manifest['version']!=version: raise SystemExit('manifest identity mismatch')
           PY
+      - name: Test offline trust helpers
+        run: python -m unittest discover -s tools/trust -p 'test_*.py' -v
       - name: Fetch reviewed inputs from the private release asset
         env:
           GH_TOKEN: ${{ secrets.STORE_INPUTS_READ_TOKEN }}
@@ -128,17 +142,25 @@ jobs:
           freshclam --stdout --config-file="$RUNNER_TEMP/store-freshclam.conf" | tee FRESHCLAM.txt
           clamscan --version > CLAMAV_DEFINITIONS.txt
           clamscan --database="$RUNNER_TEMP/store-clamav-db" --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
-      - name: Existing VirusTotal reports by hash, no uploads or rescans
+      - name: Dated VirusTotal observations - licensed GET API or owner-supplied hash links
         if: always()
         env:
           VT_API_KEY: ${{ secrets.VT_API_KEY }}
           ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+          VT_REPORT_URLS: ${{ inputs.vt_report_urls }}
+          VT_OBSERVED_AT: ${{ inputs.vt_observed_at }}
+          VT_COMMERCIAL_API_AUTHORIZED: ${{ inputs.vt_commercial_api_authorized }}
+        shell: bash
         run: |
-          if [ "$ENABLE_SIGNING" = true ]; then
-            python tools/trust/virustotal_hashes.py store-release/dist/*.store.json --query --require-complete --output VIRUSTOTAL.json
-          else
-            python tools/trust/virustotal_hashes.py store-release/dist/*.store.json --query --output VIRUSTOTAL.json
-          fi
+          set -euo pipefail
+          options=(--query --output VIRUSTOTAL.json --markdown-output VIRUSTOTAL_LINKS.md
+            --manual-report-urls "$VT_REPORT_URLS" --observed-at "$VT_OBSERVED_AT")
+          if [ "$ENABLE_SIGNING" = true ]; then options+=(--require-complete); fi
+          if [ "$VT_COMMERCIAL_API_AUTHORIZED" = true ]; then options+=(--commercial-api-authorized); fi
+          status=0
+          python tools/trust/virustotal_hashes.py store-release/dist/*.store.json "${options[@]}" || status=$?
+          if [ -f VIRUSTOTAL_LINKS.md ]; then cat VIRUSTOTAL_LINKS.md >> "$GITHUB_STEP_SUMMARY"; fi
+          exit "$status"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
@@ -148,6 +170,7 @@ jobs:
             FRESHCLAM.txt
             CLAMAV_DEFINITIONS.txt
             VIRUSTOTAL.json
+            VIRUSTOTAL_LINKS.md
           if-no-files-found: warn
   sign:
     needs: [assemble, checks, scanners]

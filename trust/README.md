@@ -9,3 +9,9 @@ private key or customer certificate belongs in this repository or CI.
 
 The key authenticates separate contractual certificates. Package binaries do
 not read certificates, contact a licence server or enforce their term.
+
+VirusTotal: publish the generated VIRUSTOTAL.json/VIRUSTOTAL_LINKS.md alongside
+release verification material and reuse their exact SHA256 report links here
+and on cards. Manual links are dated owner assertions with unverified report
+contents; they are not a clean verdict or safety certificate. No Public API is
+used without an explicitly authorized commercial API licence. See docs/STORE_RELEASE.md.

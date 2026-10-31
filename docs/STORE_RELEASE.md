@@ -24,8 +24,17 @@ Before the first manual run the owner must:
 3. Confirm the pypi/store-signing environments and desired approval/branch rules.
    They exist but protection rules are not claimed. Configure the exact PyPI
    Trusted Publisher: owner abx-takt, this repository, store-release.yml, pypi.
-4. Provide `VT_API_KEY` and existing fresh reports for each final hash before
-   requesting signing. The workflow never uploads or rescans files on VT.
+4. Choose one VirusTotal mode before requesting signing. **No key:** manually
+   upload the intended public final files using the VT website yourself, then
+   supply `vt_report_urls` (whitespace-separated exact
+   `https://www.virustotal.com/gui/file/<sha256>` URLs) and `vt_observed_at`
+   (ISO8601 with timezone). Cover every unique final wheel/member hash in the
+   generated manifest. The helper verifies the actual final wheel and all member
+   digests, rejects foreign or incomplete links, and makes **no API/HTTP calls**.
+   **With `VT_API_KEY`:** use only an API licence authorizing this commercial
+   workflow and explicitly set `vt_commercial_api_authorized=true`. A key alone
+   is insufficient. The Public API is forbidden here, including GET-only lookups.
+   The workflow never uploads or rescans files on VT.
 
 Assembly and native checks have no OIDC permission. ClamAV uses a fresh database
 directory and requires freshclam to succeed; clamscan refuses databases older
@@ -72,3 +81,25 @@ imported into the existing Cosign issuer by the owner offline when issuing;
 keep any decrypted/imported key and password solely in owner RAM/private storage.
 The certificate authenticates agreed rights; the binary does not read it or
 implement licence checks, expiry enforcement or telemetry.
+
+## VirusTotal observation manifest and trust/card links
+
+`store-scanner-summary-*` contains `VIRUSTOTAL.json` (the dated observation
+manifest) and `VIRUSTOTAL_LINKS.md`; the latter also appears in the run summary.
+Reuse its exact SHA256 links on the card and /trust/. Final wheel bytes and the
+signed STORE_MANIFEST are unchanged by scanner metadata. Links remain external
+observations, separate from signatures/provenance and from the local ClamAV gate.
+
+Manual status is `OWNER_LINKS_COMPLETE_CONTENT_UNVERIFIED`: coverage and owner
+observation date (at most 30 days old) are recorded; the helper does not verify
+that a report exists, its contents, scanner verdict or actual analysis date.
+Do not display a clean/no-detections badge based on this status. API observations
+retain their analysis date/stats and flagged/missing/stale refusal behavior.
+Signing requires complete observations in the chosen mode. Unsigned preparation
+can emit NEED_REPORTS for the owner to complete; it is not release clearance.
+The owner checks the applicable web-service terms before manual upload; this mode
+avoids the Public API and makes no claim about separate website permissions.
+
+Public API restrictions: https://docs.virustotal.com/reference/public-vs-premium-api
+Local helper controls (no API requests):
+`python3 -m unittest discover -s tools/trust -p 'test_*.py' -v`

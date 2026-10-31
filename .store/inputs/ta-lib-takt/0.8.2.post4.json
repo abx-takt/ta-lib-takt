@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "repository": "abx-takt/store-build-inputs",
+  "tag": "store-inputs-2026-10-31-v6",
+  "asset": "ta-lib-takt-0.8.2.post4-inputs.zip",
+  "sha256": "4d1416bd9b958c188f9fc57d78ffb881a9dc4f8db5cce3844df4c5a9201bb41f",
+  "files": {
+    "native-0-libta-lib-a24660d1.so.1.1.0": {
+      "sha256": "61eca31ef98119b72140756a66367db925041d0b907a4c97c8249116b66d1b36",
+      "bytes": 3165449
+    },
+    "native-1-talib_official_binding.so": {
+      "sha256": "7eaab407f2c4772778cdbfa77d774165411b677cbd9e9a75ffce4aad8713cf87",
+      "bytes": 6526913
+    },
+    "ta_lib_takt-0.8.2-cp312-cp312-manylinux_2_29_x86_64.whl": {
+      "sha256": "734875684ca8a584cafe0e614b35640184f9631da1a38915df32347ae8b51eb8",
+      "bytes": 4052533
+    }
+  }
+}

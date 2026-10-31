@@ -1,0 +1,32 @@
+{
+  "actions/checkout": {
+    "tag": "v7.0.1",
+    "commit": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "source": "https://github.com/actions/checkout/tree/3d3c42e5aac5ba805825da76410c181273ba90b1"
+  },
+  "actions/setup-python": {
+    "tag": "v7.1.0",
+    "commit": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+    "source": "https://github.com/actions/setup-python/tree/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+  },
+  "actions/upload-artifact": {
+    "tag": "v7.0.2",
+    "commit": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+    "source": "https://github.com/actions/upload-artifact/tree/cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+  },
+  "actions/download-artifact": {
+    "tag": "v8.0.2",
+    "commit": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+    "source": "https://github.com/actions/download-artifact/tree/9000827ccba6bdab643e8b6fd33ac0654aef8333"
+  },
+  "actions/attest": {
+    "tag": "v4.2.2",
+    "commit": "1e69f48acb82d1966a394da916b4c1698aa569d6",
+    "source": "https://github.com/actions/attest/tree/1e69f48acb82d1966a394da916b4c1698aa569d6"
+  },
+  "pypa/gh-action-pypi-publish": {
+    "tag": "v1.14.3",
+    "commit": "7245906fb61fa33a13554f9d5fb856fe61758086",
+    "source": "https://github.com/pypa/gh-action-pypi-publish/tree/7245906fb61fa33a13554f9d5fb856fe61758086"
+  }
+}

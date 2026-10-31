@@ -1,0 +1,32 @@
+{
+  "profile": "store",
+  "package": "ta-lib-takt",
+  "version": "0.8.2.post4",
+  "import_package": "talib",
+  "source_wheel": {
+    "path": "store-inputs/ta_lib_takt-0.8.2-cp312-cp312-manylinux_2_29_x86_64.whl",
+    "sha256": "734875684ca8a584cafe0e614b35640184f9631da1a38915df32347ae8b51eb8"
+  },
+  "native_replacements": [
+    {
+      "member": "ta_lib.libs/libta-lib-a24660d1.so.1.1.0",
+      "path": "store-inputs/native-0-libta-lib-a24660d1.so.1.1.0",
+      "sha256": "61eca31ef98119b72140756a66367db925041d0b907a4c97c8249116b66d1b36",
+      "evidence": {
+        "kind": "native compiler output before protection",
+        "compiler_output_sha256": "82457ce2a72b892fff3a0f1c3edbfebe5e869a498eba89a484a522e1a314e1fe",
+        "store_transform": "strip --strip-unneeded and expected SONAME only; no protector"
+      }
+    },
+    {
+      "member": "talib/_ta_lib.cpython-312-x86_64-linux-gnu.so",
+      "path": "store-inputs/native-1-talib_official_binding.so",
+      "sha256": "7eaab407f2c4772778cdbfa77d774165411b677cbd9e9a75ffce4aad8713cf87",
+      "evidence": {
+        "kind": "unchanged official TA-Lib Python0.8.2 binding",
+        "official_wheel_sha256": "17bb7f16936d4005d3824433a9d9b5cf5ef5341dc6b021e2ae089ceffd430c7c"
+      }
+    }
+  ],
+  "upstream_native_members": []
+}

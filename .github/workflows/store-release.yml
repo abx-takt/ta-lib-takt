@@ -1,0 +1,211 @@
+name: Store release trust chain
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version with a reviewed checked-in .store/manifests entry
+        type: string
+        required: true
+      sign_and_attest:
+        description: Publish keyless signatures and GitHub attestations
+        type: boolean
+        default: false
+      publish:
+        description: Publish the already tested and signed wheel to PyPI
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: store-ta-lib-takt-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  STORE_PACKAGE: 'ta-lib-takt'
+  STORE_VERSION: ${{ inputs.version }}
+jobs:
+  assemble:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Assemble only reviewed hash-pinned store inputs
+        env:
+          ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+          ENABLE_PUBLISHING: ${{ inputs.publish }}
+        run: |
+          python - <<'PY'
+          import os,re,json
+          version=os.environ['STORE_VERSION']
+          if not re.fullmatch(r'[0-9][A-Za-z0-9.]+',version): raise SystemExit('invalid version')
+          if os.environ['ENABLE_PUBLISHING']=='true' and os.environ['ENABLE_SIGNING']!='true': raise SystemExit('publishing requires signing')
+          manifest=json.load(open('.store/manifests/'+os.environ['STORE_PACKAGE']+'/'+version+'.json'))
+          if manifest['package']!=os.environ['STORE_PACKAGE'] or manifest['version']!=version: raise SystemExit('manifest identity mismatch')
+          PY
+      - name: Fetch reviewed inputs from the private release asset
+        env:
+          GH_TOKEN: ${{ secrets.STORE_INPUTS_READ_TOKEN }}
+        run: python tools/trust/fetch_private_inputs.py --descriptor ".store/inputs/$STORE_PACKAGE/$STORE_VERSION.json" --output store-inputs
+      - name: Assemble the approved store inputs without a protector
+        run: python tools/trust/ci_support.py assemble --manifest ".store/manifests/$STORE_PACKAGE/$STORE_VERSION.json" --output store-release
+      - name: Keep final artifacts separate from reference/check inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-final-ta-lib-takt
+          path: |
+            store-release/dist/*.whl
+            store-release/dist/*.store.json
+            store-release/native/**/*
+            store-release/STORE_MANIFEST.json
+            store-release/release_files.json
+            store-release/SHA256SUMS
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-check-input-ta-lib-takt
+          path: store-release/
+          if-no-files-found: error
+      - name: Keep the PyPI upload artifact limited to final wheels
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-pypi-ta-lib-takt
+          path: store-release/dist/*.whl
+          if-no-files-found: error
+  checks:
+    needs: assemble
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: store-check-input-ta-lib-takt
+          path: store-release
+      - name: Install declared test dependencies and tracer
+        run: |
+          python -m pip install --only-binary=:all: numpy==2.5.4 scipy==1.18.1 narwhals==2.28.0
+          sudo apt-get update -qq
+          sudo apt-get install -y strace util-linux
+      - name: Check installed final wheel and complete native outputs
+        run: python tools/trust/ci_support.py check --bundle store-release --output check-results
+      - name: Upload summary only, never raw traces or model/input contents
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-check-summary-ta-lib-takt
+          path: check-results/RESULT.json
+          if-no-files-found: warn
+  scanners:
+    needs: assemble
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: store-final-ta-lib-takt
+          path: store-release
+      - name: Dated local ClamAV signal on final bytes
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y clamav
+          mkdir -p "$RUNNER_TEMP/store-clamav-db"
+          printf 'DatabaseMirror database.clamav.net\nDatabaseDirectory %s\nDatabaseOwner %s\n' "$RUNNER_TEMP/store-clamav-db" "$(id -un)" > "$RUNNER_TEMP/store-freshclam.conf"
+          freshclam --stdout --config-file="$RUNNER_TEMP/store-freshclam.conf" | tee FRESHCLAM.txt
+          clamscan --version > CLAMAV_DEFINITIONS.txt
+          clamscan --database="$RUNNER_TEMP/store-clamav-db" --fail-if-cvd-older-than=2 --alert-exceeds-max=yes --recursive --scan-archive=yes --max-filesize=512M --max-scansize=2048M --log=CLAMAV.txt store-release/dist store-release/native
+      - name: Existing VirusTotal reports by hash, no uploads or rescans
+        if: always()
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          ENABLE_SIGNING: ${{ inputs.sign_and_attest }}
+        run: |
+          if [ "$ENABLE_SIGNING" = true ]; then
+            python tools/trust/virustotal_hashes.py store-release/dist/*.store.json --query --require-complete --output VIRUSTOTAL.json
+          else
+            python tools/trust/virustotal_hashes.py store-release/dist/*.store.json --query --output VIRUSTOTAL.json
+          fi
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-scanner-summary-ta-lib-takt
+          path: |
+            CLAMAV.txt
+            FRESHCLAM.txt
+            CLAMAV_DEFINITIONS.txt
+            VIRUSTOTAL.json
+          if-no-files-found: warn
+  sign:
+    needs: [assemble, checks, scanners]
+    if: inputs.sign_and_attest && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment: store-signing
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: store-final-ta-lib-takt
+          path: store-release
+      - name: Install independently pinned signing tool
+        run: python tools/trust/install_cosign.py --output signing-tools/cosign
+      - name: Sign final wheel, exact native payloads and manifest; execute none
+        env:
+          EXPECTED_IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: python tools/trust/sign_release.py --bundle store-release --output signatures --cosign signing-tools/cosign --mode keyless --identity "$EXPECTED_IDENTITY"
+      - name: Attest assembly provenance of final artifacts
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: |
+            store-release/dist/*.whl
+            store-release/native/**/*
+            store-release/STORE_MANIFEST.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: store-signatures-ta-lib-takt
+          path: signatures/
+          if-no-files-found: error
+  publish:
+    needs: [assemble, checks, scanners, sign]
+    if: inputs.publish && inputs.sign_and_attest && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ta-lib-takt
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: store-pypi-ta-lib-takt
+          path: dist
+      - name: PyPI Trusted Publishing with PEP 740 publish attestations
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086
+        with:
+          packages-dir: dist/
+          attestations: true
+          skip-existing: false

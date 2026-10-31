@@ -4,8 +4,19 @@ This workflow runs only by workflow_dispatch on main. Signing/attestation and
 PyPI publication default to false. No private build inputs are stored here.
 
 The reviewed descriptor in `.store/inputs/<package>/<version>.json` names an
-exact SHA256-pinned ZIP release asset in **abx-takt/store-build-inputs**, a
-separate **private** repository. Its source wheel/native files are also pinned
+exact SHA256-pinned ZIP in **abx-takt/store-build-inputs**, a separate **private**
+repository. Default `input_transport=auto` prefers `STORE_INPUTS_DEPLOY_KEY`
+(read-only SSH deploy key); otherwise it uses `STORE_INPUTS_READ_TOKEN` (release
+PAT). Explicit `ssh`/`pat` choices are available. A failed SSH fetch is refused;
+it does not silently retry via another credential.
+
+SSH clones tag `inputs-git-2026-10-31-v6` without checking out or running files,
+requires commit `7f34571aee38da77a376fb28c5fea086a0c0b59e`, and reads the exact
+`inputs/<asset>` and `inputs/SHA256SUMS` regular blobs. ZIP/member SHA and size
+checks are identical for both transports. PAT uses the separate `release_tag`
+field (`store-inputs-2026-10-31-v6`), with the original private-repo API check.
+The SSH mode relies on the reviewed repository allowlist, fixed commit and the
+owner's private repository configuration; it does not need a cross-repo API token. Its source wheel/native files are also pinned
 individually and must match the assembly manifest. These are precompiled inputs;
 no private source, packer, customer data or entitlement key is needed in CI.
 The resulting provenance describes assembly, not reproduction of the closed
@@ -16,11 +27,17 @@ Before the first manual run the owner must:
 1. Create/confirm the private input repository, create the tag named by the
    descriptor and upload the exact local ZIP supplied in the handoff. Do not
    upload these ZIPs to this public repository, a public release, VT or logs.
-2. Set repository secret `STORE_INPUTS_READ_TOKEN` to a fine-grained token with
-   Contents:read for only that private repository (or the equivalent short-lived
-   GitHub App token). The public repo GITHUB_TOKEN cannot read another private
-   repo. Only the trusted main assemble step receives this credential; no PR
-   workflow is added. Rotation/expiry remains the owner's responsibility.
+2. Configure `STORE_INPUTS_DEPLOY_KEY` as the read-only deploy key secret for
+   only that input repository (already provisioned by the coordinator), or the
+   optional `STORE_INPUTS_READ_TOKEN` with Contents:read for the PAT alternative.
+   The public repo GITHUB_TOKEN cannot read another private repo. Only the trusted
+   main assemble fetch step receives these credentials; no PR workflow is added.
+   SSH writes its IdentityFile in a temporary0700 directory with mode0600,
+   disables agents/passwords, requires strict host-key verification against the
+   checked-in GitHub Ed25519 pin and cleans up on exit. Key bytes never appear in
+   arguments/reports, and the key/token environment is removed from git/ssh child
+   processes. No key is committed or uploaded in artifacts. Rotation/revocation
+   remains the owner's responsibility.
 3. Confirm the pypi/store-signing environments and desired approval/branch rules.
    They exist but protection rules are not claimed. Configure the exact PyPI
    Trusted Publisher: owner abx-takt, this repository, store-release.yml, pypi.
@@ -103,3 +120,12 @@ avoids the Public API and makes no claim about separate website permissions.
 Public API restrictions: https://docs.virustotal.com/reference/public-vs-premium-api
 Local helper controls (no API requests):
 `python3 -m unittest discover -s tools/trust -p 'test_*.py' -v`
+
+## SSH host pin
+
+GitHub Ed25519 host fingerprint:
+`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`, pinned in
+fetch_private_inputs.py and verified by an offline test. No ssh-keyscan, TOFU or
+StrictHostKeyChecking=no. Source:
+https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+A host-key rotation requires a reviewed source update, not automatic trust.

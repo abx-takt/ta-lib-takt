@@ -148,3 +148,10 @@ The scanner never executes a package payload. Config preparation, actual install
 path permissions, package AppArmor profile, parser and update stdout/stderr are
 retained in scanner-summary. No profile is removed or switched to complain mode.
 Signing/publishing remain false by default.
+
+Scanner stdout/stderr is written by runner-owned tee, not a root-only --log
+file. Shell pipefail preserves nonzero updater/scanner exits. CLAMAV_SUMMARY.json
+requires exactly one Infected files:0 summary and a matching engine version plus
+the actual configured database version/build date (freshclam --version after
+update). Both full freshclam/clamscan stdout+stderr logs remain in the artifact.
+This is a dated observation, not a general safety certificate.
